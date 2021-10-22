@@ -225,6 +225,19 @@ static Counts& counts() {
 #    define ROBIN_HOOD_PRIVATE_DEFINITION_NODISCARD()
 #endif
 
+// malloc/calloc/free macros
+#ifndef ROBIN_HOOD_MALLOC
+#    define ROBIN_HOOD_MALLOC(size) std::malloc(size)
+#endif
+
+#ifndef ROBIN_HOOD_CALLOC
+#    define ROBIN_HOOD_CALLOC(count, size) std::calloc((count), (size))
+#endif
+
+#ifndef ROBIN_HOOD_FREE
+#    define ROBIN_HOOD_FREE(ptr) std::free(ptr)
+#endif
+
 namespace robin_hood {
 
 #if ROBIN_HOOD(CXX) >= ROBIN_HOOD(CXX14)
@@ -405,7 +418,7 @@ public:
         while (mListForFree) {
             T* tmp = *mListForFree;
             ROBIN_HOOD_LOG("std::free")
-            std::free(mListForFree);
+            ROBIN_HOOD_FREE(mListForFree);
             mListForFree = reinterpret_cast_no_cast_align_warning<T**>(tmp);
         }
         mHead = nullptr;
@@ -441,7 +454,7 @@ public:
         if (numBytes < ALIGNMENT + ALIGNED_SIZE) {
             // not enough data for at least one element. Free and return.
             ROBIN_HOOD_LOG("std::free")
-            std::free(ptr);
+            ROBIN_HOOD_FREE(ptr);
         } else {
             ROBIN_HOOD_LOG("add to buffer")
             add(ptr, numBytes);
@@ -510,7 +523,7 @@ private:
         size_t const bytes = ALIGNMENT + ALIGNED_SIZE * numElementsToAlloc;
         ROBIN_HOOD_LOG("std::malloc " << bytes << " = " << ALIGNMENT << " + " << ALIGNED_SIZE
                                       << " * " << numElementsToAlloc)
-        add(assertNotNull<std::bad_alloc>(std::malloc(bytes)), bytes);
+        add(assertNotNull<std::bad_alloc>(ROBIN_HOOD_MALLOC(bytes)), bytes);
         return mHead;
     }
 
@@ -547,7 +560,7 @@ struct NodeAllocator<T, MinSize, MaxSize, true> {
     // we are not using the data, so just free it.
     void addOrFree(void* ptr, size_t ROBIN_HOOD_UNUSED(numBytes) /*unused*/) noexcept {
         ROBIN_HOOD_LOG("std::free")
-        std::free(ptr);
+        ROBIN_HOOD_FREE(ptr);
     }
 };
 
@@ -1594,7 +1607,7 @@ public:
                                           << numElementsWithBuffer << ")")
             mHashMultiplier = o.mHashMultiplier;
             mKeyVals = static_cast<Node*>(
-                detail::assertNotNull<std::bad_alloc>(std::malloc(numBytesTotal)));
+                detail::assertNotNull<std::bad_alloc>(ROBIN_HOOD_MALLOC(numBytesTotal)));
             // no need for calloc because clonData does memcpy
             mInfo = reinterpret_cast<uint8_t*>(mKeyVals + numElementsWithBuffer);
             mNumElements = o.mNumElements;
@@ -1643,7 +1656,7 @@ public:
             if (0 != mMask) {
                 // only deallocate if we actually have data!
                 ROBIN_HOOD_LOG("std::free")
-                std::free(mKeyVals);
+                ROBIN_HOOD_FREE(mKeyVals);
             }
 
             auto const numElementsWithBuffer = calcNumElementsWithBuffer(o.mMask + 1);
@@ -1651,7 +1664,7 @@ public:
             ROBIN_HOOD_LOG("std::malloc " << numBytesTotal << " = calcNumBytesTotal("
                                           << numElementsWithBuffer << ")")
             mKeyVals = static_cast<Node*>(
-                detail::assertNotNull<std::bad_alloc>(std::malloc(numBytesTotal)));
+                detail::assertNotNull<std::bad_alloc>(ROBIN_HOOD_MALLOC(numBytesTotal)));
 
             // no need for calloc here because cloneData performs a memcpy.
             mInfo = reinterpret_cast<uint8_t*>(mKeyVals + numElementsWithBuffer);
@@ -2226,7 +2239,7 @@ private:
             if (oldKeyVals != reinterpret_cast_no_cast_align_warning<Node*>(&mMask)) {
                 // don't destroy old data: put it into the pool instead
                 if (forceFree) {
-                    std::free(oldKeyVals);
+                    ROBIN_HOOD_FREE(oldKeyVals);
                 } else {
                     DataPool::addOrFree(oldKeyVals, calcNumBytesTotal(oldMaxElementsWithBuffer));
                 }
@@ -2313,7 +2326,7 @@ private:
         ROBIN_HOOD_LOG("std::calloc " << numBytesTotal << " = calcNumBytesTotal("
                                       << numElementsWithBuffer << ")")
         mKeyVals = reinterpret_cast<Node*>(
-            detail::assertNotNull<std::bad_alloc>(std::calloc(1, numBytesTotal)));
+            detail::assertNotNull<std::bad_alloc>(ROBIN_HOOD_CALLOC(1, numBytesTotal)));
         mInfo = reinterpret_cast<uint8_t*>(mKeyVals + numElementsWithBuffer);
 
         // set sentinel
@@ -2461,7 +2474,7 @@ private:
         // [-Werror=free-nonheap-object]
         if (mKeyVals != reinterpret_cast_no_cast_align_warning<Node*>(&mMask)) {
             ROBIN_HOOD_LOG("std::free")
-            std::free(mKeyVals);
+            ROBIN_HOOD_FREE(mKeyVals);
         }
     }
 
